@@ -1,0 +1,33 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel ComputeHistogram
+#pragma kernel InitHistogram
+#define HISTOGRAM_BINS 256
+#define THREADX 16
+#define THREADY 16
+
+RWStructuredBuffer<uint> Histogram;
+Texture2D<float4> Source;
+
+groupshared uint gs_histogram[HISTOGRAM_BINS];
+
+[numthreads(1,1,1)]
+void InitHistogram (uint3 id : SV_DispatchThreadID)
+{	
+	Histogram[id.x] = 0;
+}
+
+
+[numthreads(THREADX,THREADY,1)]
+void ComputeHistogram (uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 GTid : SV_GroupThreadID, uint GI : SV_GroupIndex )
+{	
+	gs_histogram[GI] = 0;
+	GroupMemoryBarrierWithGroupSync();
+	
+	float intensity = Source[DTid.xy].r;
+	uint idx = (uint)(intensity * (HISTOGRAM_BINS - 1));
+	InterlockedAdd(gs_histogram[idx], 1);
+
+    GroupMemoryBarrierWithGroupSync();
+	
+	InterlockedAdd(Histogram[GI], gs_histogram[GI]);
+}

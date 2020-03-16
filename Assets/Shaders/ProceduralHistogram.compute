@@ -1,0 +1,16 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel ProceduralHistogram
+#define HISTOGRAM_BINS 256
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+RWStructuredBuffer<uint> Histogram;
+float SourceSize;
+float Sigma;
+
+[numthreads(HISTOGRAM_BINS,1,1)]
+void ProceduralHistogram (uint3 id : SV_DispatchThreadID)
+{
+    // TODO: insert actual code here!
+	float p = exp(-((HISTOGRAM_BINS-1-id.x)/Sigma))/Sigma;
+    Histogram[id.x] = uint(p*SourceSize);
+}

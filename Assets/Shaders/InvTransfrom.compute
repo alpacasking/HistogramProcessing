@@ -1,0 +1,45 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel FuncDiff
+#pragma kernel FuncMap
+
+#define THREADX 16
+#define THREADY 16
+#define HISTOGRAM_BINS 256
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+StructuredBuffer<uint> SourceCDF;
+StructuredBuffer<uint> TargetCDF;
+RWTexture2D<int> DiffTexture;
+
+RWStructuredBuffer<uint> ResultFunc;
+
+groupshared uint2 sharedMem[HISTOGRAM_BINS];
+
+[numthreads(THREADX,THREADY,1)]
+void FuncDiff (uint3 id : SV_DispatchThreadID)
+{
+	DiffTexture[id.xy] = int(abs(SourceCDF[id.x] - TargetCDF[id.y]));
+}
+
+// Parallel Reduction
+[numthreads(HISTOGRAM_BINS, 1, 1)]
+void FuncMap( uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 GTid : SV_GroupThreadID, uint GI : SV_GroupIndex  )
+{
+	sharedMem[GI] = uint2(DiffTexture[uint2(Gid.x,GI)],GI); 
+
+	GroupMemoryBarrierWithGroupSync(); // wait until everything is transfered from device memory to shared memory
+
+	 [unroll(HISTOGRAM_BINS / 2)]
+	 for (uint s = HISTOGRAM_BINS / 2; s > 0; s >>= 1){
+		if (GI < s){
+			if(sharedMem[GI].x > sharedMem[GI + s].x){
+				sharedMem[GI] = sharedMem[GI + s]; 
+			}
+		}
+		GroupMemoryBarrierWithGroupSync();
+	}
+	
+	if (GI == 0){
+		ResultFunc[Gid.x] = sharedMem[0].y;
+	}
+}

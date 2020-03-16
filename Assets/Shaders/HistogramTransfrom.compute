@@ -1,0 +1,27 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel HistogramTransfromCDF
+#pragma kernel HistogramTransfromPure
+#define HISTOGRAM_BINS 256
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+Texture2D<float4> Source;
+RWTexture2D<float4> Result;
+
+StructuredBuffer<uint> TransfromFunc;
+float SourceSize;
+
+[numthreads(8,8,1)]
+void HistogramTransfromCDF (uint3 id : SV_DispatchThreadID)
+{
+    uint sourceIntensity = (HISTOGRAM_BINS-1)*saturate(Source[id.xy].r);
+	float resultIntensity = TransfromFunc[sourceIntensity]/SourceSize;
+	Result[id.xy] = float4(resultIntensity,resultIntensity,resultIntensity,1);
+}
+
+[numthreads(8,8,1)]
+void HistogramTransfromPure (uint3 id : SV_DispatchThreadID)
+{
+    uint sourceIntensity = (HISTOGRAM_BINS-1)*saturate(Source[id.xy].r);
+	float resultIntensity = TransfromFunc[sourceIntensity]/float(HISTOGRAM_BINS-1);
+	Result[id.xy] = float4(resultIntensity,resultIntensity,resultIntensity,1);
+}

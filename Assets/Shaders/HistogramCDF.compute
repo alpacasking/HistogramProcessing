@@ -1,0 +1,60 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel HistogramCDF
+#pragma kernel HistogramCDF2
+#define HISTOGRAM_BINS 256
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+StructuredBuffer<uint> SourceHistogram;
+RWStructuredBuffer<uint> ResultFunc;
+
+groupshared uint sSums[HISTOGRAM_BINS];
+
+[numthreads(HISTOGRAM_BINS,1,1)]
+void HistogramCDF (uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 GTid : SV_GroupThreadID, uint GI : SV_GroupIndex)
+{
+	sSums[GI] = SourceHistogram[GI];
+	GroupMemoryBarrierWithGroupSync();
+	for(int t=1; t<HISTOGRAM_BINS; t=t<<1){
+		if (int(GI) >= t)
+			sSums[GI] += sSums[GI-t];
+		GroupMemoryBarrierWithGroupSync();
+	}
+	// Use results
+	ResultFunc[GI] = sSums[GI];
+}
+
+[numthreads(HISTOGRAM_BINS,1,1)]
+void HistogramCDF2 (uint GI : SV_GroupIndex)
+{
+
+	sSums[GI] = SourceHistogram[GI];
+	GroupMemoryBarrierWithGroupSync();
+	// Up-Sweep
+	for (uint s = 1; s < HISTOGRAM_BINS; s <<= 1) 
+	{
+		int index = 2 * s * GI;
+		if (index < HISTOGRAM_BINS)
+			sSums[index] += sSums[index + s];
+		GroupMemoryBarrierWithGroupSync();
+	}
+
+	if(GI == 0){
+		sSums[0] = 0;
+	}
+	GroupMemoryBarrierWithGroupSync();
+	// Down-Sweep
+	 for ( s = HISTOGRAM_BINS / 2; s > 0; s >>= 1){
+		int index = 2 * s * GI;
+		if (index < HISTOGRAM_BINS){
+			int lNode = index + s;
+			int rNode = index;
+			uint tmp = sSums[lNode];           // Save left child
+			sSums[lNode]  = sSums[index];  // Set left child to this node’s value
+			sSums[rNode]  += tmp;  // Set right child to old left value + this node’s value
+		}
+		GroupMemoryBarrierWithGroupSync();
+	}
+	// Use results
+	ResultFunc[GI] = sSums[GI];
+}
+
